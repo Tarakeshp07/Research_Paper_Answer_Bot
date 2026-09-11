@@ -1,0 +1,67 @@
+# Research Paper Answer Bot — core dependencies
+#
+# REQUIRES PYTHON 3.11. Not 3.12, not 3.13.
+#   Check with:  python --version
+#   If wrong, recreate the venv:  py -3.11 -m venv .venv
+#
+# Strategy: the LangChain packages are pinned to the 0.3.x line because this
+# project uses 0.3-era import paths (langchain.retrievers.EnsembleRetriever,
+# langchain.storage.LocalFileStore, langchain.embeddings.CacheBackedEmbeddings).
+# LangChain 1.x moved these. Everything else uses ranges so pip can resolve a
+# mutually consistent set rather than fighting exact pins.
+
+# ---- LangChain 0.3.x line (do not cross into 1.x) ----
+langchain>=0.3.27,<0.4
+langchain-core>=0.3.70,<0.4
+langchain-community>=0.3.27,<0.4
+langchain-chroma>=0.2.0,<0.3
+langchain-huggingface>=0.1.2,<0.4
+langchain-google-genai>=2.0.0,<3
+langchain-experimental>=0.3.0,<0.4
+langchain-text-splitters>=0.3.0,<0.4
+
+# ---- Vector store ----
+chromadb>=0.5.0,<2
+
+# ---- Embeddings / reranking ----
+sentence-transformers>=3.0.0,<6
+torch>=2.2.0
+
+# ---- Keyword retrieval (hybrid search) ----
+rank-bm25>=0.2.2
+
+# ---- PDF parsing ----
+pymupdf>=1.24.0
+pymupdf4llm>=0.0.17
+
+# ---- Stretch goal: CRAG web fallback ----
+ddgs>=6.0.0
+
+# ---- UI ----
+streamlit>=1.36.0
+
+# ---- Utilities ----
+python-dotenv>=1.0.0
+requests>=2.31.0
+pandas>=2.0.0
+numpy>=1.26,<3
+matplotlib>=3.8.0
+seaborn>=0.13.0
+tqdm>=4.66.0
+ipywidgets>=8.1.0
+
+# ---- Notebook ----
+jupyterlab>=4.0.0
+
+# ---------------------------------------------------------------------------
+# INSTALLED SEPARATELY — see WALKTHROUGH.md
+#
+#   RAGAS evaluation (notebook section 8):
+#       pip install -r requirements-eval.txt
+#   It pins pydantic/datasets tightly and can conflict with the core set, so it
+#   is kept out of this file. Sections 1-7 and 9 work without it.
+#
+#   Docling parser comparison (notebook section 2.2, optional):
+#       pip install docling
+#   Downloads 1-2 GB of layout models on first use.
+# ---------------------------------------------------------------------------

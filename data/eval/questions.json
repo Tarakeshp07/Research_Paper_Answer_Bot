@@ -1,0 +1,206 @@
+{
+  "_readme": [
+    "Ground truth for retrieval and generation evaluation.",
+    "",
+    "LABELLING POLICY:",
+    "  answer_paper_ids  - REQUIRED. The arXiv id(s) of papers containing the answer.",
+    "                      Paper-level labels stay valid when you change chunk_size,",
+    "                      which is what makes experiment tables comparable.",
+    "  answer_pages      - OPTIONAL, starts empty. Fill in after your first retrieval",
+    "                      run if you want page-level precision. A chunk then counts as",
+    "                      relevant only if within +/-1 page of a listed page.",
+    "  answerable        - false marks questions the corpus CANNOT answer. These are",
+    "                      excluded from retrieval metrics and used only to test that",
+    "                      the system refuses instead of hallucinating.",
+    "  reference_answer  - used by RAGAS context_recall. Keep it short and factual.",
+    "",
+    "IMPORTANT: label these BEFORE tuning. The brief warns explicitly against",
+    "evaluating only on the queries the system was built around."
+  ],
+
+  "questions": [
+    {
+      "id": "q01",
+      "type": "single-hop",
+      "question": "What is the formula for scaled dot-product attention, and why is the dot product scaled?",
+      "answer_paper_ids": ["1706.03762"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "Attention(Q,K,V) = softmax(QK^T / sqrt(d_k))V. The scaling by 1/sqrt(d_k) counteracts large dot products that push softmax into regions with extremely small gradients."
+    },
+    {
+      "id": "q02",
+      "type": "single-hop",
+      "question": "How many encoder and decoder layers does the base Transformer model use, and what is its model dimension?",
+      "answer_paper_ids": ["1706.03762"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "The base model uses 6 identical layers in both the encoder and decoder stacks, with model dimension d_model = 512."
+    },
+    {
+      "id": "q03",
+      "type": "single-hop",
+      "question": "What are the two pre-training objectives used by BERT?",
+      "answer_paper_ids": ["1810.04805"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "Masked Language Modelling (predicting randomly masked tokens) and Next Sentence Prediction (predicting whether one sentence follows another)."
+    },
+    {
+      "id": "q04",
+      "type": "single-hop",
+      "question": "How many parameters does GPT-3 have, and what does the paper mean by in-context learning?",
+      "answer_paper_ids": ["2005.14165"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "GPT-3 has 175 billion parameters. In-context learning means the model performs a task from examples given in the prompt at inference time, with no gradient updates or fine-tuning."
+    },
+    {
+      "id": "q05",
+      "type": "single-hop",
+      "question": "What are the two components of the original RAG architecture, and how are they combined?",
+      "answer_paper_ids": ["2005.11401"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "A dense passage retriever (DPR-based, providing latent documents) and a pre-trained seq2seq generator (BART), trained end-to-end by marginalising over retrieved documents."
+    },
+    {
+      "id": "q06",
+      "type": "single-hop",
+      "question": "How does Dense Passage Retrieval train its encoders, and what negative sampling strategy does it use?",
+      "answer_paper_ids": ["2004.04906"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "DPR trains separate dense encoders for questions and passages with a contrastive objective, using in-batch negatives plus hard negatives mined from BM25."
+    },
+    {
+      "id": "q07",
+      "type": "single-hop",
+      "question": "In LoRA, which weights are frozen during fine-tuning and what is injected instead?",
+      "answer_paper_ids": ["2106.09685"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "The pre-trained model weights stay frozen; trainable low-rank decomposition matrices (A and B, of rank r) are injected into each Transformer layer, drastically cutting trainable parameters."
+    },
+    {
+      "id": "q08",
+      "type": "single-hop",
+      "question": "What is chain-of-thought prompting and at what model scale does it begin to help?",
+      "answer_paper_ids": ["2201.11903"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "Prompting the model with exemplars containing intermediate reasoning steps. It is an emergent ability, yielding gains only at roughly 100B parameters and above."
+    },
+    {
+      "id": "q09",
+      "type": "single-hop",
+      "question": "What are the three steps of the InstructGPT training pipeline?",
+      "answer_paper_ids": ["2203.02155"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "1) Supervised fine-tuning on human demonstrations, 2) training a reward model on human preference comparisons, 3) optimising the policy against the reward model with PPO."
+    },
+    {
+      "id": "q10",
+      "type": "single-hop",
+      "question": "What does the ReAct framework interleave, and how does that differ from chain-of-thought alone?",
+      "answer_paper_ids": ["2210.03629"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "ReAct interleaves reasoning traces with task-specific actions that query external sources. Unlike pure chain-of-thought, it can ground its reasoning in retrieved evidence, reducing hallucination."
+    },
+
+    {
+      "id": "q11",
+      "type": "cross-paper",
+      "question": "How do the Chinchilla scaling conclusions differ from the earlier Kaplan scaling laws regarding the balance of model size and training data?",
+      "answer_paper_ids": ["2001.08361", "2203.15556"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "Kaplan et al. concluded that model size should grow much faster than dataset size under a fixed compute budget. Chinchilla found current large models were significantly undertrained and that parameters and training tokens should scale roughly equally."
+    },
+    {
+      "id": "q12",
+      "type": "cross-paper",
+      "question": "How does Direct Preference Optimization avoid the reward model and reinforcement learning stages used by InstructGPT?",
+      "answer_paper_ids": ["2305.18290", "2203.02155"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "DPO shows the RLHF objective can be reparameterised so the optimal policy has a closed-form relation to preferences, letting you train directly on preference pairs with a simple classification loss — no separate reward model and no PPO."
+    },
+    {
+      "id": "q13",
+      "type": "cross-paper",
+      "question": "How does Self-RAG's approach to deciding when to retrieve differ from the always-retrieve strategy of the original RAG paper?",
+      "answer_paper_ids": ["2310.11511", "2005.11401"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "The original RAG retrieves a fixed number of passages for every input. Self-RAG trains the model to emit reflection tokens that decide adaptively whether retrieval is needed and to critique the relevance and support of retrieved passages."
+    },
+    {
+      "id": "q14",
+      "type": "cross-paper",
+      "question": "What does the Lost in the Middle paper find about where relevant information should sit in a long context, and what does that imply for reranking retrieved passages?",
+      "answer_paper_ids": ["2307.03172"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "Performance is highest when relevant information is at the very beginning or very end of the context and degrades markedly in the middle — a U-shaped curve. This implies the best-ranked passages should be placed at the context edges rather than buried."
+    },
+    {
+      "id": "q15",
+      "type": "cross-paper",
+      "question": "Both BERT and GPT-3 are Transformer-based, but how do their architectures and training objectives differ?",
+      "answer_paper_ids": ["1810.04805", "2005.14165", "1706.03762"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "BERT is a bidirectional encoder trained with masked language modelling, designed to be fine-tuned. GPT-3 is a unidirectional (causal) decoder trained with autoregressive next-token prediction, designed to be used few-shot without fine-tuning."
+    },
+
+    {
+      "id": "q16",
+      "type": "definitional",
+      "question": "What is multi-head attention and why use multiple heads instead of one?",
+      "answer_paper_ids": ["1706.03762"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "Multi-head attention runs several attention functions in parallel over different learned linear projections, letting the model jointly attend to information from different representation subspaces at different positions, which a single head averages away."
+    },
+    {
+      "id": "q17",
+      "type": "definitional",
+      "question": "What is the rank r hyperparameter in LoRA and what trade-off does it control?",
+      "answer_paper_ids": ["2106.09685"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "r is the rank of the injected low-rank update matrices. Lower r means fewer trainable parameters and less memory, but less capacity to adapt; the paper finds surprisingly small r is often sufficient."
+    },
+    {
+      "id": "q18",
+      "type": "definitional",
+      "question": "What is positional encoding in the Transformer and why is it necessary?",
+      "answer_paper_ids": ["1706.03762"],
+      "answer_pages": [],
+      "answerable": true,
+      "reference_answer": "Sinusoidal functions of different frequencies added to input embeddings. Because self-attention is permutation-invariant and contains no recurrence or convolution, the model would otherwise have no information about token order."
+    },
+
+    {
+      "id": "q19",
+      "type": "unanswerable",
+      "question": "What was the exact training cost in US dollars of GPT-5, and which cloud provider was used?",
+      "answer_paper_ids": [],
+      "answer_pages": [],
+      "answerable": false,
+      "reference_answer": "Not answerable from the indexed corpus — no paper in it discusses GPT-5."
+    },
+    {
+      "id": "q20",
+      "type": "unanswerable",
+      "question": "According to these papers, what is the optimal learning rate for fine-tuning a model on Tamil-language legal documents?",
+      "answer_paper_ids": [],
+      "answer_pages": [],
+      "answerable": false,
+      "reference_answer": "Not answerable from the indexed corpus — none of the papers address Tamil-language legal document fine-tuning."
+    }
+  ]
+}

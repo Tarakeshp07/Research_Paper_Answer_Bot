@@ -1,0 +1,14 @@
+# RAGAS evaluation — install AFTER requirements.txt succeeds.
+#
+#     pip install -r requirements-eval.txt
+#
+# Kept separate because ragas pins pydantic and datasets tightly and is the most
+# common source of resolver conflicts. Only notebook section 8.2 needs it;
+# everything else runs without it.
+#
+# If this install downgrades langchain-core or breaks an import, roll it back:
+#     pip uninstall -y ragas datasets
+#     pip install -r requirements.txt
+
+ragas>=0.2.0
+datasets>=2.19.0

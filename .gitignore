@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Data artefacts — regenerate with scripts/build_index.py
+data/papers/*.pdf
+data/cache/
+data/chroma/
+
+# Keep the eval set and results under version control
+!data/eval/questions.json
