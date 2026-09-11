@@ -79,17 +79,27 @@ def parse_pymupdf(pdf_path: str | Path) -> list[tuple[int, str]]:
 # Parser B — docling (optional comparison arm)
 # --------------------------------------------------------------------------
 
-def parse_docling(pdf_path: str | Path) -> list[tuple[int, str]]:
+def parse_docling(pdf_path: str | Path, max_pages: int | None = None) -> list[tuple[int, str]]:
     """
     Structure-aware parse via Docling. Returns [(page_number, text), ...].
 
     Requires `pip install docling` (~1-2GB of model weights on first run).
     Raises ImportError if unavailable so the caller can skip this arm.
+
+    max_pages: convert only the first N pages. Docling runs a layout model on
+    every page and is 5-30x slower than pymupdf4llm, so a full paper takes
+    minutes on CPU. The Section 2 comparison only needs to look at ONE page —
+    pass max_pages=4 there and keep the cell responsive. Leave it None only if
+    you actually intend to parse the whole document.
     """
     from docling.document_converter import DocumentConverter
 
     converter = DocumentConverter()
-    result = converter.convert(str(pdf_path))
+    kwargs = {}
+    if max_pages:
+        kwargs["page_range"] = (1, max_pages)   # 1-based, inclusive
+
+    result = converter.convert(str(pdf_path), **kwargs)
     doc = result.document
 
     by_page: dict[int, list[str]] = {}
