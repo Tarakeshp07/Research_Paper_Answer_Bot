@@ -26,7 +26,8 @@ from . import config
 from .embeddings import EMBEDDING_SPECS, get_embedder
 
 # Chroma rejects oversized add() calls; stay well under the internal limit.
-INDEX_BATCH = 256
+INDEX_BATCH_OSS = config.INDEX_BATCH_OSS   # local model — big batches are free
+INDEX_BATCH_API = config.INDEX_BATCH_API   # API model — commit often to keep progress
 
 
 def collection_path() -> str:
@@ -58,9 +59,6 @@ def build_index(
     )
 
     existing = store._collection.count()
-    if existing and not rebuild:
-        print(f"[{embedder_name}] collection '{collection}' already has {existing} vectors — reusing")
-        return store, 0.0
 
     if existing and rebuild:
         print(f"[{embedder_name}] dropping {existing} existing vectors")
@@ -71,17 +69,50 @@ def build_index(
             persist_directory=collection_path(),
             collection_metadata={"hnsw:space": "cosine"},
         )
+        existing = 0
 
-    ids = [d.metadata["chunk_id"] for d in docs]
+    # Resume support: work out which chunks are actually missing rather than
+    # trusting the count. A build interrupted by a quota error leaves a PARTIAL
+    # collection; treating "count > 0" as "done" would silently ship an
+    # incomplete index and quietly corrupt every experiment downstream.
+    todo = docs
+    if existing:
+        try:
+            present = set(store.get(include=[]).get("ids", []))
+        except Exception:
+            present = set()
+
+        todo = [d for d in docs if d.metadata["chunk_id"] not in present]
+
+        if not todo:
+            print(f"[{embedder_name}] collection '{collection}' complete "
+                  f"({existing} vectors) — reusing")
+            return store, 0.0
+
+        print(f"[{embedder_name}] resuming: {existing} of {len(docs)} present, "
+              f"{len(todo)} still to embed")
+
+    # API-backed embedders commit in smaller batches so an interruption keeps
+    # more progress — every completed batch is cached and persisted.
+    batch_size = INDEX_BATCH_API if embedder_name.startswith("gemini") else INDEX_BATCH_OSS
 
     t0 = time.perf_counter()
-    for start in tqdm(range(0, len(docs), INDEX_BATCH), desc=f"Indexing [{embedder_name}]"):
-        batch = docs[start : start + INDEX_BATCH]
-        store.add_documents(batch, ids=ids[start : start + INDEX_BATCH])
-    elapsed = time.perf_counter() - t0
+    done = 0
+    try:
+        for start in tqdm(range(0, len(todo), batch_size),
+                          desc=f"Indexing [{embedder_name}]", unit="batch"):
+            batch = todo[start : start + batch_size]
+            store.add_documents(batch, ids=[d.metadata["chunk_id"] for d in batch])
+            done += len(batch)
+    except Exception:
+        elapsed = time.perf_counter() - t0
+        print(f"\n[{embedder_name}] interrupted after {done}/{len(todo)} chunks "
+              f"({elapsed:.0f}s). Progress is saved — re-run the same command to resume.")
+        raise
 
-    print(f"[{embedder_name}] indexed {len(docs)} chunks in {elapsed:.1f}s "
-          f"({len(docs) / max(elapsed, 1e-6):.1f} chunks/s)")
+    elapsed = time.perf_counter() - t0
+    print(f"[{embedder_name}] indexed {done} chunks in {elapsed:.1f}s "
+          f"({done / max(elapsed, 1e-6):.1f} chunks/s)")
     return store, elapsed
 
 

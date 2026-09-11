@@ -138,10 +138,21 @@ HYBRID_WEIGHTS = (0.5, 0.5)    # (bm25, dense) for the ensemble retriever
 # --------------------------------------------------------------------------
 # Gemini free-tier throttling
 # --------------------------------------------------------------------------
-# Free tier is roughly 15 RPM / 1500 RPD for Flash. We batch embeddings and
-# sleep between batches so a full index build doesn't trip the limiter.
-GEMINI_EMBED_BATCH = 64
-GEMINI_EMBED_SLEEP = 1.0       # seconds between batches
+# The embedding quota is counted PER TEXT, not per API call: the free tier
+# allows ~100 embed_content requests per minute per model, and a batch of 64
+# texts consumes 64 of them. Sleeping between batches is therefore not enough —
+# we need a rolling-window limiter over the number of TEXTS sent.
+#
+# Note both Gemini arms (3072d and 768d) are the SAME underlying model, so they
+# share one quota bucket. Budget ~2 x corpus_size embeddings in total.
+GEMINI_EMBED_RPM = 90          # texts per minute; headroom under the 100 limit
+GEMINI_EMBED_BATCH = 32        # texts per API call
+GEMINI_EMBED_MAX_ATTEMPTS = 8  # per batch, honouring server-supplied retry delays
+
+# Chunks per Chroma add_documents() call. Smaller means more frequent commits,
+# so an interrupted build keeps more progress (embeddings cache per call).
+INDEX_BATCH_OSS = 256
+INDEX_BATCH_API = 96
 
 # --------------------------------------------------------------------------
 # Corpus

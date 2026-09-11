@@ -17,8 +17,9 @@ same chunk twice across notebook re-runs.
 
 from __future__ import annotations
 
+import re
 import time
-from typing import Iterable
+from collections import deque
 
 from langchain.embeddings import CacheBackedEmbeddings
 from langchain_core.embeddings import Embeddings
@@ -28,46 +29,143 @@ from . import config
 
 
 # --------------------------------------------------------------------------
-# Rate-limited wrapper for the Gemini free tier
+# Rate limiting for the Gemini free tier
 # --------------------------------------------------------------------------
+
+class RateLimiter:
+    """
+    Rolling-window limiter over the number of ITEMS sent per minute.
+
+    This is the shape the Gemini quota actually takes. The free tier allows
+    ~100 embed_content requests per minute per model, and batch_embed_contents
+    with N texts consumes N of them — so limiting the number of API CALLS does
+    nothing. We track the timestamp of every text sent and block until the
+    oldest one falls outside the 60-second window.
+    """
+
+    def __init__(self, max_per_minute: int):
+        self.max_per_minute = max_per_minute
+        self._sent: deque[float] = deque()
+
+    def acquire(self, n: int) -> None:
+        n = min(n, self.max_per_minute)
+        while True:
+            now = time.monotonic()
+            while self._sent and now - self._sent[0] >= 60.0:
+                self._sent.popleft()
+
+            if len(self._sent) + n <= self.max_per_minute:
+                self._sent.extend([now] * n)
+                return
+
+            wait = 60.0 - (now - self._sent[0]) + 0.5
+            if wait > 0:
+                print(f"    rate limit: waiting {wait:.0f}s "
+                      f"({len(self._sent)}/{self.max_per_minute} used this minute)")
+                time.sleep(wait)
+
+    def penalise(self, seconds: float) -> None:
+        """After a 429, treat the whole window as spent for `seconds`."""
+        now = time.monotonic()
+        self._sent.clear()
+        self._sent.extend([now + max(0.0, seconds - 60.0)] * self.max_per_minute)
+
+
+_RETRY_PATTERNS = (
+    re.compile(r"retry in ([0-9]+(?:\.[0-9]+)?)s"),
+    re.compile(r"retry_delay\s*{\s*seconds:\s*([0-9]+)"),
+    re.compile(r"seconds:\s*([0-9]+)"),
+)
+
+
+def server_retry_delay(exc: Exception) -> float | None:
+    """
+    Extract the wait the server asked for.
+
+    Google's 429 says exactly how long to wait ("Please retry in 45.2s").
+    Ignoring that and using your own shorter backoff guarantees the retry fails
+    — which is precisely what happened before this was added.
+    """
+    text = str(exc)
+    for pattern in _RETRY_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                continue
+    return None
+
+
+def is_quota_error(exc: Exception) -> bool:
+    t = str(exc).lower()
+    return "429" in t or "resource_exhausted" in t or "quota" in t
+
 
 class ThrottledEmbeddings(Embeddings):
     """
-    Wraps an Embeddings object, batching document calls and sleeping between
-    batches so the Gemini free tier (~15 RPM) doesn't return 429s mid-index.
+    Rate-limited wrapper around an API embedding model.
 
-    Query embedding is not throttled — it's a single call and latency matters.
+    - Limits TEXTS per minute, not calls (see RateLimiter).
+    - Honours the server's own retry_delay on 429 instead of guessing.
+    - Retries generously, because a quota wait is not a failure — it is the
+      normal cost of running a few thousand embeddings on a free tier.
+
+    Query embedding is deliberately not throttled: it is a single call on the
+    interactive path, and latency there is user-visible.
     """
 
     def __init__(
         self,
         inner: Embeddings,
         batch_size: int = config.GEMINI_EMBED_BATCH,
-        sleep_s: float = config.GEMINI_EMBED_SLEEP,
+        rpm: int = config.GEMINI_EMBED_RPM,
+        max_attempts: int = config.GEMINI_EMBED_MAX_ATTEMPTS,
+        limiter: RateLimiter | None = None,
     ):
         self.inner = inner
         self.batch_size = batch_size
-        self.sleep_s = sleep_s
+        self.max_attempts = max_attempts
+        self.limiter = limiter or RateLimiter(rpm)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         from tqdm.auto import tqdm
 
         out: list[list[float]] = []
-        batches = range(0, len(texts), self.batch_size)
-        for start in tqdm(batches, desc="Embedding batches", leave=False):
+        starts = list(range(0, len(texts), self.batch_size))
+
+        for start in tqdm(starts, desc="  embedding", leave=False, unit="batch"):
             batch = texts[start : start + self.batch_size]
-            for attempt in range(5):
-                try:
-                    out.extend(self.inner.embed_documents(batch))
-                    break
-                except Exception as exc:
-                    wait = self.sleep_s * (2 ** attempt)
-                    if attempt == 4:
-                        raise
-                    print(f"  embed retry {attempt + 1}/4 after {wait:.0f}s ({type(exc).__name__})")
-                    time.sleep(wait)
-            time.sleep(self.sleep_s)
+            out.extend(self._embed_batch(batch))
         return out
+
+    def _embed_batch(self, batch: list[str]) -> list[list[float]]:
+        last_error: Exception | None = None
+
+        for attempt in range(1, self.max_attempts + 1):
+            self.limiter.acquire(len(batch))
+            try:
+                return self.inner.embed_documents(batch)
+            except Exception as exc:
+                last_error = exc
+
+                if is_quota_error(exc):
+                    wait = server_retry_delay(exc) or 60.0
+                    wait = min(max(wait + 2.0, 5.0), 180.0)
+                    self.limiter.penalise(wait)
+                    print(f"    quota hit — waiting {wait:.0f}s as the server asked "
+                          f"(attempt {attempt}/{self.max_attempts})")
+                else:
+                    wait = min(2.0 * (2 ** (attempt - 1)), 60.0)
+                    print(f"    {type(exc).__name__} — retrying in {wait:.0f}s "
+                          f"(attempt {attempt}/{self.max_attempts})")
+
+                if attempt < self.max_attempts:
+                    time.sleep(wait)
+
+        raise RuntimeError(
+            f"Embedding failed after {self.max_attempts} attempts: {last_error}"
+        )
 
     def embed_query(self, text: str) -> list[float]:
         return self.inner.embed_query(text)
@@ -103,6 +201,16 @@ def _bge(model_name: str = config.OSS_EMBED_MODEL, device: str | None = None) ->
     )
 
 
+_SHARED_GEMINI_LIMITER: RateLimiter | None = None
+
+
+def _gemini_limiter() -> RateLimiter:
+    global _SHARED_GEMINI_LIMITER
+    if _SHARED_GEMINI_LIMITER is None:
+        _SHARED_GEMINI_LIMITER = RateLimiter(config.GEMINI_EMBED_RPM)
+    return _SHARED_GEMINI_LIMITER
+
+
 def _gemini(dim: int | None = None) -> Embeddings:
     """
     gemini-embedding-001 with task types.
@@ -120,7 +228,10 @@ def _gemini(dim: int | None = None) -> Embeddings:
         kwargs["output_dimensionality"] = dim
 
     inner = GoogleGenerativeAIEmbeddings(**kwargs)
-    return ThrottledEmbeddings(inner)
+    # Both Gemini arms are the same underlying model and therefore share one
+    # quota bucket — they must share one limiter, or building the second arm
+    # immediately trips the limit the first one was carefully respecting.
+    return ThrottledEmbeddings(inner, limiter=_gemini_limiter())
 
 
 # --------------------------------------------------------------------------
