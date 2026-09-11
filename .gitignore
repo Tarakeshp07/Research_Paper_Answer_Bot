@@ -1,7 +1,24 @@
+# Secrets
 .env
+
+# Python
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Scratch notebooks
+notebooks/Untitled*.ipynb
 
 # Data artefacts — regenerate with scripts/build_index.py
 data/papers/*.pdf
