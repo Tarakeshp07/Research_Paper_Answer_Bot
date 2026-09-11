@@ -38,16 +38,20 @@ def build_index(
     docs: list[Document],
     embedder_name: str,
     rebuild: bool = False,
+    suffix: str = "",
 ) -> tuple[Chroma, float]:
     """
     Build (or open) the Chroma collection for one embedding model.
+
+    `suffix` gives a separate collection for the same embedder — used to keep
+    the quota-limited Experiment 1 subset ("_sub") apart from the full corpus.
 
     Returns (vectorstore, seconds_spent_indexing). The timing feeds the
     "index time" column of Experiment 1.
     """
     config.ensure_dirs()
     spec = EMBEDDING_SPECS[embedder_name]
-    collection = spec["collection"]
+    collection = spec["collection"] + suffix
 
     embedder = get_embedder(embedder_name, cached=True)
 
@@ -116,26 +120,45 @@ def build_index(
     return store, elapsed
 
 
-def load_index(embedder_name: str) -> Chroma:
+def load_index(embedder_name: str, suffix: str = "") -> Chroma:
     """Open an existing collection without rebuilding."""
     spec = EMBEDDING_SPECS[embedder_name]
     return Chroma(
-        collection_name=spec["collection"],
+        collection_name=spec["collection"] + suffix,
         embedding_function=get_embedder(embedder_name, cached=True),
         persist_directory=collection_path(),
         collection_metadata={"hnsw:space": "cosine"},
     )
 
 
-def index_summary(embedder_name: str) -> dict:
-    store = load_index(embedder_name)
+def index_summary(embedder_name: str, suffix: str = "") -> dict:
+    store = load_index(embedder_name, suffix)
     spec = EMBEDDING_SPECS[embedder_name]
     return {
         "embedder": embedder_name,
         "label": spec["label"],
-        "collection": spec["collection"],
+        "collection": spec["collection"] + suffix,
         "n_vectors": store._collection.count(),
         "dim": spec["dim"],
+    }
+
+
+def quota_report(n_chunks: int, n_api_arms: int = 2, daily_quota: int = 1000) -> dict:
+    """
+    How many days of free-tier quota an index build would need.
+
+    Run this BEFORE starting a build. Discovering a five-day quota requirement
+    partway through a run is an expensive way to learn it.
+    """
+    needed = n_chunks * n_api_arms
+    return {
+        "chunks": n_chunks,
+        "api_arms": n_api_arms,
+        "embeddings_needed": needed,
+        "daily_quota": daily_quota,
+        "days_required": round(needed / daily_quota, 1),
+        "fits_in_one_day": needed <= daily_quota,
+        "max_chunks_for_one_day": daily_quota // max(1, n_api_arms),
     }
 
 
